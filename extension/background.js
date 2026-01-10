@@ -1,0 +1,1 @@
+// Optional - monitor tab switch or auto-scan pages

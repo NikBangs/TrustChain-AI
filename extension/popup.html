@@ -1,18 +1,53 @@
 <!DOCTYPE html>
-<html>
-<meta charset="UTF-8">
+<html lang="en">
 <head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>TrustChain AI</title>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <div id="main" style="font-family: sans-serif; padding: 12px;">
-    <h2>🔐 TrustChain AI</h2>
-    <p><strong>Trust Score:</strong> <span id="score">Loading...</span></p>
-    <p><strong>Risk Level:</strong> <span id="risk"></span></p>
-    <div id="criteria" style="margin-top: 10px;"></div>
+  <div id="main">
+    <div class="header">
+      <h1>
+        TrustChain AI
+      </h1>
+    </div>
+    
+    <div class="content">
+      <div id="loading" class="loading">
+        <div class="loading-spinner"></div>
+        <div>Analyzing website...</div>
+      </div>
 
-    <button id="report" style="margin-top: 10px;">🚨 Report Fraud</button>
+      <div id="status" style="display: none;">
+        <div class="status-card">
+          <div class="score-container">
+            <div>
+              <div class="score-label">Trust Score</div>
+              <div id="score" class="score-value">--</div>
+            </div>
+          </div>
+          <div id="risk" class="risk-badge">--</div>
+        </div>
+
+        <div class="criteria-section">
+          <div class="criteria-title">
+            <span>📋</span>
+            <span>Evaluation Criteria</span>
+          </div>
+          <div id="criteria" class="criteria-list"></div>
+        </div>
+
+        <button id="report" class="report-button">
+          <span>🚨</span>
+          <span>Report Fraud</span>
+        </button>
+      </div>
+
+      <div id="error" style="display: none;" class="error-message"></div>
+      <div id="success" style="display: none;" class="success-message"></div>
+    </div>
   </div>
 
   <script src="popup.js"></script>

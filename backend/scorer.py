@@ -5,11 +5,15 @@ from dotenv import load_dotenv
 from datetime import datetime
 
 from utils import (
+    fetch_website_text,
     check_domain_age,
     check_blacklist_status,
-    has_known_payment_gateway,
-    extract_legal_pages,
-    check_social_sentiment
+    check_social_sentiment,
+    analyze_payment_security,
+    analyze_technical_behavior,
+    analyze_onsite_legitimacy, 
+    analyze_offsite_legitimacy
+    
 )
 from logger import log_evaluation_entry, log_debug
 
@@ -20,11 +24,13 @@ def evaluate(domain, content):
     trust_score = 0
     criteria_log = {}
 
+    #page_text = fetch_website_text(domain)
+
     domain_score, domain_failures = score_domain_reputation(domain)
     sentiment_score, sentiment_failures = score_user_sentiment(domain)
     payment_score, payment_failures = score_payment_security(domain)
-    technical_score, technical_failures = score_technical_behavior(content)
-    business_score, business_failures = score_business_legitimacy(content)
+    technical_score, technical_failures = score_technical_behavior(domain)
+    business_score, business_failures = score_business_legitimacy(domain)
 
     trust_score = domain_score + sentiment_score + payment_score + technical_score + business_score
 
@@ -99,8 +105,6 @@ def score_payment_security(domain):
     failures = []
 
     try:
-        from utils import analyze_payment_security
-
         intel = analyze_payment_security(domain)
         baseline_trust = intel.get("baseline_trust", False)
         
@@ -176,23 +180,139 @@ def score_payment_security(domain):
 
     return max(0, score), failures
 
-def score_technical_behavior(content):
+def score_technical_behavior(domain):
     score = 20
     failures = []
-    red_flags = ["redirect", "popup", "malware", "you won", "error", "ai-generated"]
-    for flag in red_flags:
-        if flag in content:
-            failures.append(flag)
-    penalty = len(failures) * 3
-    return max(0, score - penalty), failures
+
+    try:
+        intel = analyze_technical_behavior(domain)
+
+        # ---- A. HTTPS (5 pts) ----
+        if not intel.get("https"):
+            score -= 5
+            failures.append("no_https")
+
+        # ---- B. Redirects (4 pts) ----
+        redirects = intel.get("redirects")
+        if redirects == "acceptable":
+            score -= 1
+        elif redirects == "excessive":
+            score -= 4
+            failures.append("excessive_redirects")
+
+        # ---- C. Script Risk (5 pts) ----
+        script_risk = intel.get("script_risk")
+        if script_risk == "medium":
+            score -= 2
+        elif script_risk == "high":
+            score -= 5
+            failures.append("high_risk_scripts")
+
+        # ---- D. Popups / Cloaking (4 pts) ----
+        popup = intel.get("popup_behavior")
+        if popup == "mild":
+            score -= 2
+        elif popup == "aggressive":
+            score -= 4
+            failures.append("forced_interruption_behavior")
+
+        # ---- E. Page Errors (2 pts) ----
+        errors = intel.get("page_errors")
+        if errors == "minor":
+            score -= 1
+        elif errors == "severe":
+            score -= 2
+            failures.append("server_errors")
+
+    except Exception as e:
+        log_debug(f"Technical behavior scoring failed: {str(e)}")
+        failures.append("technical_behavior_analysis_failed")
+        score -= 8
+
+    return max(0, score), failures
 
 
-def score_business_legitimacy(content):
+def score_business_legitimacy(domain):
+
     score = 0
     failures = []
-    matched = extract_legal_pages(content)
-    score += len(matched) * 3
-    for kw in ["refund", "return", "terms", "privacy", "contact", "email"]:
-        if kw not in matched:
-            failures.append(f"missing_{kw}")
-    return min(20, score), failures
+
+    # ---------- ON-SITE LEGITIMACY (8 pts) ----------
+    try:
+        onsite_intel = analyze_onsite_legitimacy(domain)
+
+        # A. Legal pages (4 pts)
+        legal_count = sum(onsite_intel["legal_pages"].values())
+        score += min(4, legal_count)
+        for page, exists in onsite_intel["legal_pages"].items():
+            if not exists:
+                failures.append(f"missing_{page}_page")
+
+        # B. Contact credibility (2 pts)
+        contact = onsite_intel["contact_info"]
+        if contact["email"]:
+            if contact.get("free_email", False):
+                score += 1
+                failures.append("generic_email_provider")
+            else:
+                score += 2
+        else:
+            failures.append("no_email_found")
+
+        # C. Address presence (2 pts)
+        if contact.get("address"):
+            score += 2
+        else:
+            failures.append("no_address_found")
+
+        # D. Policy depth & site effort bonus (0–2 pts)
+        if onsite_intel.get("policy_depth") == "clear":
+            score += 1
+        elif onsite_intel.get("policy_depth") == "missing":
+            failures.append("no_refund_policy")
+
+        if onsite_intel.get("site_effort") in ["medium", "high"]:
+            score += 1
+        else:
+            failures.append("low_site_effort")
+
+    except Exception as e:
+        failures.append("onsite_legitimacy_check_failed")
+        score -= 3
+
+    # ---------- OFF-SITE LEGITIMACY (12 pts) ----------
+
+    try:
+        off_intel = analyze_offsite_legitimacy(domain)
+
+        if off_intel["company_existence"] == "confirmed":
+            score += 3
+        elif off_intel["company_existence"] == "weak":
+            score += 1
+        else:
+            failures.append("company_not_verified")
+
+        brand_map = {"high": 3, "medium": 2, "low": 1}
+        score += brand_map.get(off_intel["brand_recognition"], 0)
+
+        media_map = {"strong": 2, "limited": 1}
+        score += media_map.get(off_intel["media_presence"], 0)
+
+        if off_intel["consistency"] == "consistent":
+            score += 2
+        else:
+            failures.append("offsite_inconsistency")
+
+        if off_intel["scam_reports"] == "none":
+            score += 2
+        elif off_intel["scam_reports"] == "isolated":
+            score += 1
+        else:
+            score -= 4
+            failures.append("multiple_scam_reports")
+
+    except Exception as e:
+        failures.append("offsite_legitimacy_check_failed")
+        score -= 3
+
+    return max(0, min(20, score)), failures

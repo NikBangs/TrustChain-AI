@@ -1,8 +1,10 @@
 # scorer.py - Full scoring logic using utils.py and logger.py for TrustChain AI
 
 import os
+import time
 from dotenv import load_dotenv
 from datetime import datetime
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from utils import (
     fetch_website_text,
@@ -26,13 +28,45 @@ def evaluate(domain, content):
 
     #page_text = fetch_website_text(domain)
 
-    domain_score, domain_failures = score_domain_reputation(domain)
-    sentiment_score, sentiment_failures = score_user_sentiment(domain)
-    payment_score, payment_failures = score_payment_security(domain)
-    technical_score, technical_failures = score_technical_behavior(domain)
-    business_score, business_failures = score_business_legitimacy(domain)
+    # Execute scoring functions in parallel for better performance
+    scoring_functions = [
+        ("domain", score_domain_reputation),
+        ("sentiment", score_user_sentiment),
+        ("payment", score_payment_security),
+        ("technical", score_technical_behavior),
+        ("business", score_business_legitimacy)
+    ]
+    
+    results = {}
+    start_time = time.perf_counter()
+    with ThreadPoolExecutor(max_workers=5) as executor:
+        # Submit all tasks
+        future_to_key = {
+            executor.submit(func, domain): key 
+            for key, func in scoring_functions
+        }
+        
+        # Collect results as they complete
+        for future in as_completed(future_to_key):
+            key = future_to_key[future]
+            try:
+                results[key] = future.result()
+            except Exception as e:
+                log_debug(f"Error in {key} scoring: {str(e)}")
+                # Set default values on error
+                results[key] = (0, [f"{key}_scoring_error"])
+    execution_time = time.perf_counter() - start_time
+    
+    domain_score, domain_failures = results["domain"]
+    sentiment_score, sentiment_failures = results["sentiment"]
+    payment_score, payment_failures = results["payment"]
+    technical_score, technical_failures = results["technical"]
+    business_score, business_failures = results["business"]
 
     trust_score = domain_score + sentiment_score + payment_score + technical_score + business_score
+    
+    print(f"Parallel scoring execution completed in {execution_time:.2f} seconds")
+    log_debug(f"Parallel scoring execution completed in {execution_time:.2f} seconds")
 
     if trust_score >= 80:
         risk = "safe"

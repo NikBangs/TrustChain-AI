@@ -280,7 +280,23 @@ Guidelines:
             "baseline_trust": baseline_trust
         }
     try:
-        data = json.loads(model_text)
+        # ---- SAFE JSON EXTRACTION ----
+        clean_output = model_text.strip()
+
+        # Remove ```json and ``` fences
+        clean_output = re.sub(r"^```json\s*", "", clean_output, flags=re.IGNORECASE)
+        clean_output = re.sub(r"\s*```$", "", clean_output)
+
+        log_debug(f"[PaymentSecurity] Cleaned model output (first 300 chars): {clean_output[:300]}")
+
+        # ---- Hard JSON completeness check ----
+        if not clean_output.startswith("{") or not clean_output.endswith("}"):
+            log_debug("[PaymentSecurity] Incomplete JSON detected, triggering fallback")
+            raise ValueError("Incomplete JSON from model")
+
+        # ---- Strict JSON parse ----
+        data = json.loads(clean_output)
+        log_debug(f"[PaymentSecurity] Parsed JSON successfully")
         log_debug(f"[PaymentSecurity] Parsed JSON: {data}")
     except json.JSONDecodeError as e:
         log_debug(f"[PaymentSecurity] JSON parsing failed: {e}")

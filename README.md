@@ -1,6 +1,6 @@
 # TrustChain AI
 
-A browser extension and backend service that evaluates website trustworthiness using AI-powered analysis and blockchain-based reporting. TrustChain AI helps users identify potentially fraudulent or suspicious e-commerce websites by analyzing multiple security signals.
+A browser extension and backend service that evaluates website trustworthiness using AI-powered analysis. TrustChain AI helps users identify potentially fraudulent or suspicious e-commerce websites by analyzing multiple security signals.
 
 ## Features
 
@@ -10,8 +10,6 @@ A browser extension and backend service that evaluates website trustworthiness u
   - Payment security (gateway reputation, scam reports)
   - Technical behavior (malware indicators, suspicious patterns)
   - Business legitimacy (legal pages, contact information)
-
-- **Blockchain Integration**: Reports and checks suspicious sites on-chain via Ethereum smart contracts
 
 - **Real-time Analysis**: Chrome extension that provides instant trust scores for any website
 
@@ -25,7 +23,6 @@ TrustChain AI/
 │   ├── app.py           # Main Flask application
 │   ├── scorer.py        # Trust scoring logic
 │   ├── utils.py         # Utility functions (API integrations)
-│   ├── blockchain.py    # Web3/blockchain interactions
 │   ├── logger.py        # Logging utilities
 │   └── requirements.txt # Python dependencies
 ├── extension/           # Chrome extension
@@ -35,10 +32,7 @@ TrustChain AI/
 │   ├── content.js       # Content script
 │   ├── background.js    # Background service worker
 │   └── icon.png         # Extension icon
-└── smart-contract/      # Ethereum smart contract
-    ├── contracts/       # Solidity contracts
-    ├── scripts/         # Deployment scripts
-    └── hardhat.config.js # Hardhat configuration
+└── smart-contract/      # (legacy) Ethereum smart contract (no longer required)
 ```
 
 ## Setup
@@ -73,10 +67,10 @@ TrustChain AI/
    REDDIT_CLIENT_SECRET=your_reddit_client_secret
    REDDIT_USER_AGENT=your_reddit_user_agent
    
-   # Blockchain Configuration
-   RPC=your_ethereum_rpc_url
-   CONTRACT_ADDRESS=your_contract_address
-   PRIVATE_KEY=your_private_key
+   # (Legacy) Blockchain Configuration - no longer required
+   # RPC=your_ethereum_rpc_url
+   # CONTRACT_ADDRESS=your_contract_address
+   # PRIVATE_KEY=your_private_key
    ```
 
 5. Run the Flask server:
@@ -118,7 +112,7 @@ TrustChain AI/
   - Body: `{ "domain": "example.com", "content": "page content..." }`
   - Returns: `{ "trust_score": 85, "risk": "safe", "flagged": false, "criteria": {...} }`
 
-- `POST /report` - Report a suspicious website to the blockchain
+- `POST /report` - Report a suspicious website to the backend logging system
   - Body: `{ "domain": "suspicious-site.com" }`
   - Returns: `{ "status": "logged", "tx": "0x..." }`
 
@@ -150,9 +144,9 @@ The trust score (0-100) is calculated from five categories (20 points each):
 | `REDDIT_CLIENT_ID` | Reddit API client ID | No |
 | `REDDIT_CLIENT_SECRET` | Reddit API client secret | No |
 | `REDDIT_USER_AGENT` | Reddit API user agent | No |
-| `RPC` | Ethereum RPC endpoint URL | Yes |
-| `CONTRACT_ADDRESS` | Deployed TrustChain contract address | Yes |
-| `PRIVATE_KEY` | Ethereum private key for transactions | Yes |
+| `RPC` | Ethereum RPC endpoint URL (legacy, no longer used) | No |
+| `CONTRACT_ADDRESS` | Deployed TrustChain contract address (legacy, no longer used) | No |
+| `PRIVATE_KEY` | Ethereum private key for transactions (legacy, no longer used) | No |
 
 ## Contributing
 

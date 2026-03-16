@@ -6,7 +6,6 @@ document.addEventListener("DOMContentLoaded", async () => {
   const scoreEl = document.getElementById("score");
   const riskEl = document.getElementById("risk");
   const criteriaEl = document.getElementById("criteria");
-  const reportBtn = document.getElementById("report");
 
   try {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
@@ -19,7 +18,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         return;
       }
 
-      const { trust_score, risk, flagged, criteria } = response;
+      const { trust_score, risk, criteria } = response;
 
       // Update score with color coding
       scoreEl.textContent = trust_score || "N/A";
@@ -40,10 +39,7 @@ document.addEventListener("DOMContentLoaded", async () => {
       riskEl.className = "risk-badge";
       riskEl.textContent = risk || "Unknown";
       
-      if (flagged) {
-        riskEl.classList.add("flagged");
-        riskEl.textContent = "⚠️ Flagged - Already Reported";
-      } else if (riskLower.includes("low") || riskLower.includes("safe")) {
+      if (riskLower.includes("low") || riskLower.includes("safe")) {
         riskEl.classList.add("safe");
       } else if (riskLower.includes("medium") || riskLower.includes("moderate")) {
         riskEl.classList.add("moderate");
@@ -99,38 +95,6 @@ document.addEventListener("DOMContentLoaded", async () => {
       // Show status, hide loading
       loadingEl.style.display = "none";
       statusEl.style.display = "block";
-
-      // Report button handler
-      reportBtn.addEventListener("click", async () => {
-        reportBtn.disabled = true;
-        reportBtn.innerHTML = '<span>⏳</span><span>Reporting...</span>';
-        
-        try {
-          const res = await fetch("http://localhost:5000/report", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ domain: new URL(tab.url).hostname })
-          });
-
-          if (res.ok) {
-            const data = await res.json();
-            showSuccess(`Fraud reported to blockchain! Transaction: ${data.tx?.substring(0, 20)}...`);
-            
-            // Update UI to show flagged status
-            riskEl.className = "risk-badge flagged";
-            riskEl.textContent = "⚠️ Flagged - Already Reported";
-          } else {
-            showError("Failed to report fraud. Please try again.");
-            reportBtn.disabled = false;
-            reportBtn.innerHTML = '<span>🚨</span><span>Report Fraud</span>';
-          }
-        } catch (err) {
-          console.error("Report error:", err);
-          showError("Error reporting fraud. Please check your connection.");
-          reportBtn.disabled = false;
-          reportBtn.innerHTML = '<span>🚨</span><span>Report Fraud</span>';
-        }
-      });
     });
   } catch (err) {
     console.error("Error:", err);

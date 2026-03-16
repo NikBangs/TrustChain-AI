@@ -387,48 +387,100 @@ def analyze_technical_behavior(domain):
         scripts = soup.find_all("script")
         inline_scripts = [s for s in scripts if not s.get("src")]
 
-        risky_keywords = ["eval(", "document.write", "atob(", "fromCharCode", "window.location"]
-        risky_count = 0
+        total_risk_score = 0
 
         for script in inline_scripts:
             code = script.text.lower()
-            if any(k in code for k in risky_keywords):
-                risky_count += 1
 
-        if risky_count == 0:
+            script_score = 0
+
+            # ---- High Risk Primitives ----
+            if "eval(" in code:
+                script_score += 3
+
+            if "new function(" in code:
+                script_score += 3
+
+            if "document.write" in code:
+                script_score += 2
+
+            # ---- Obfuscation Signals ----
+            if "atob(" in code:
+                script_score += 2
+
+            if "fromcharcode" in code:
+                script_score += 2
+
+            # ---- Dangerous Combinations ----
+            if "eval(" in code and "atob(" in code:
+                script_score += 3  # encoded payload execution
+
+            if "eval(" in code and "fromcharcode" in code:
+                script_score += 3  # charcode-based obfuscation
+
+            # ---- Timed String Execution ----
+            if 'settimeout("' in code or "settimeout('" in code:
+                script_score += 2
+
+            if 'setinterval("' in code or "setinterval('" in code:
+                script_score += 2
+
+            # ---- Redirect Behavior ----
+            if "window.location" in code:
+                script_score += 1
+
+                # Escalate if redirect appears automatic
+                if "window.location=" in code and "click" not in code:
+                    script_score += 1
+
+            total_risk_score += script_score
+
+        # ---- Final Classification ----
+        if total_risk_score == 0:
             result["script_risk"] = "low"
-        elif risky_count <= 2:
+        elif total_risk_score <= 4:
             result["script_risk"] = "medium"
         else:
             result["script_risk"] = "high"
 
         # ---- C. Popup / Cloaking Detection ----
-        high_risk_popup_patterns = [
-            "window.open(",
-            "onbeforeunload",
-            "alert(",
-            "confirm(",
-            "prompt(",
-            "setinterval(",
-            "settimeout("
-        ]
-        popup_hits = 0
+        popup_score = 0
 
         for script in inline_scripts:
             code = script.text.lower()
 
-            if "window.open(" in code and "click" not in code:
-                popup_hits += 2  # very strong signal
+            # ---- 1. Automatic window spawning ----
+            if "window.open(" in code:
+                popup_score += 1
 
+                # Escalate if likely auto-triggered (not user event based)
+                if not any(evt in code for evt in ["onclick", "addeventlistener", "click", "mousedown"]):
+                    popup_score += 2  # strong auto-popup signal
+
+            # ---- 2. Exit trapping ----
             if "onbeforeunload" in code:
-                popup_hits += 2
+                popup_score += 3  # very strong manipulation signal
 
-            if any(k in code for k in ["alert(", "confirm(", "prompt("]):
-                popup_hits += 1
+            # ---- 3. Blocking dialogs ----
+            if "alert(" in code:
+                popup_score += 1
 
-        if popup_hits == 0:
+            if "confirm(" in code:
+                popup_score += 1
+
+            if "prompt(" in code:
+                popup_score += 2  # stronger than alert, often phishing-related
+
+            # ---- 4. Timed popup triggers ----
+            if "settimeout(" in code or "setinterval(" in code:
+                # Escalate only if combined with popup functions
+                if any(k in code for k in ["alert(", "confirm(", "prompt(", "window.open("]):
+                    popup_score += 2
+
+        # ---- Final Classification ----
+        if popup_score == 0:
             result["popup_behavior"] = "none"
-        elif popup_hits <= 1:
+        elif popup_score <= 2:
             result["popup_behavior"] = "mild"
         else:
             result["popup_behavior"] = "aggressive"
@@ -470,8 +522,12 @@ def analyze_onsite_legitimacy(domain):
 
     try:
         # ---- Normalize domain ----
+        from urllib.parse import urljoin, urlparse
+
         domain = domain.replace("https://", "").replace("http://", "").split("/")[0]
+        base_domain = domain.replace("www.", "")
         url = f"https://{domain}"
+
         headers = {"User-Agent": "Mozilla/5.0"}
 
         response = requests.get(url, headers=headers, timeout=15)
@@ -484,22 +540,54 @@ def analyze_onsite_legitimacy(domain):
         # 1. Legal Page Detection
         # -----------------------------
         legal_patterns = {
-            "terms": ["terms", "terms-of-service", "terms-of-use"],
-            "privacy": ["privacy", "privacy-policy"],
-            "refund": ["refund", "return", "cancellation"],
-            "shipping": ["shipping", "delivery"]
+            "terms": [
+                "terms", "terms-of-service", "terms-of-use", "terms-and-conditions", "conditions"
+            ],
+            "privacy": [
+                "privacy", "privacy-policy"
+            ],
+            "refund": [
+                "refund", "return", "cancellation"
+            ],
+            "exchange": [
+                "exchange", "replacement"
+            ],
+            "shipping": [
+                "shipping", "delivery"
+            ]
         }
 
         legal_links_found = 0
+        legal_page_urls = []
+        base_url = f"https://{domain}"
 
         for link in links:
-            href = link["href"].lower()
-            text = link.get_text().lower()
+            raw_href = link["href"]
+            link_text = link.get_text().strip().lower()
+
+            full_url = urljoin(base_url, raw_href)
+            parsed = urlparse(full_url)
+
+            parsed_domain = parsed.netloc.replace("www.", "")
+
+            # Strict same domain check
+            if parsed_domain != base_domain:
+                continue
+
+            path = parsed.path.lower()
+            path_segments = path.strip("/").split("/")
 
             for key, patterns in legal_patterns.items():
-                if any(p in href or p in text for p in patterns):
+                if result["legal_pages"].get(key):
+                    continue
+
+                if (
+                    any(p in segment for segment in path_segments for p in patterns)
+                    or any(p in link_text for p in patterns)
+                ):
                     result["legal_pages"][key] = True
                     legal_links_found += 1
+                    legal_page_urls.append(full_url)
 
         # -----------------------------
         # 2. Contact Info Detection
@@ -554,36 +642,66 @@ def analyze_onsite_legitimacy(domain):
         # -----------------------------
         # 3. Policy Depth Evaluation
         # -----------------------------
-        # Patterns indicating a refund/return/cancellation policy
+        combined_policy_text = page_text
+
+        # Fetch up to 5 legal pages for deeper scan
+        for legal_url in legal_page_urls[:5]:
+            try:
+                legal_response = requests.get(legal_url, headers=headers, timeout=10)
+                legal_soup = BeautifulSoup(legal_response.text, "html.parser")
+                legal_text = legal_soup.get_text(separator=" ").lower()
+                combined_policy_text += " " + legal_text
+            except Exception:
+                continue
+
         positive_patterns = [
-            r"refund", r"return", r"cancellation", r"eligible for refund",
-            r"refunds will be issued", r"returns accepted", r"money back"
+            r"refund", r"return", r"cancellation",
+            r"eligible for refund", r"refunds will be issued",
+            r"returns accepted", r"money back"
         ]
 
-        # Patterns indicating restrictions (negative phrases)
         negative_patterns = [
-            r"no refunds", r"non[- ]?refundable", r"all sales final", r"no returns",
+            r"no refunds", r"non[- ]?refundable",
+            r"all sales final", r"no returns",
             r"returns not accepted"
         ]
 
-        policy_score = 0
+        policy_mentions = []
         positive_hits = 0
         negative_hits = 0
 
+        sentences = re.split(r"[.\n]", combined_policy_text)
+
+        for sentence in sentences:
+            sentence = sentence.strip()
+            if any(k in sentence for k in ["refund", "return", "cancellation", "exchange"]):
+                policy_mentions.append(sentence)
+
         for pattern in positive_patterns:
-            matches = re.findall(pattern, page_text)
-            if matches:
-                positive_hits += len(matches)
-                policy_score += 2  # each positive mention adds to clarity
+            positive_hits += len(re.findall(pattern, combined_policy_text))
 
         for pattern in negative_patterns:
-            matches = re.findall(pattern, page_text)
-            if matches:
-                negative_hits += len(matches)
-                policy_score += 1  # still indicates a policy exists, but vague/negative
+            negative_hits += len(re.findall(pattern, combined_policy_text))
 
-        # Decide policy_depth
-        if policy_score >= 4 and positive_hits > 0:
+        policy_length_score = sum(len(s.split()) for s in policy_mentions)
+
+        policy_score = 0
+
+        if positive_hits + negative_hits > 0:
+            policy_score += 2
+
+        if policy_length_score > 100:
+            policy_score += 2
+        elif policy_length_score > 40:
+            policy_score += 1
+
+        if negative_hits > 0:
+            policy_score += 2
+
+        if positive_hits >= 3:
+            policy_score += 2
+
+        if policy_score >= 5:
             result["policy_depth"] = "clear"
         elif policy_score >= 2:
             result["policy_depth"] = "vague"

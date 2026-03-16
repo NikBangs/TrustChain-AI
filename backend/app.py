@@ -3,8 +3,7 @@
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from scorer import evaluate
-from blockchain import is_reported, report_site
-from logger import get_recent_logs
+from logger import get_recent_logs, log_debug
 
 app = Flask(__name__)
 CORS(app)
@@ -15,13 +14,11 @@ def evaluate_site():
     domain = data.get("domain")
     content = data.get("content")
 
-    flagged = is_reported(domain)
     trust_score, risk, criteria = evaluate(domain, content)
 
     return jsonify({
         "trust_score": trust_score,
         "risk": risk,
-        "flagged": flagged,
         "criteria": criteria
     })
 
@@ -30,8 +27,8 @@ def evaluate_site():
 def report():
     data = request.get_json()
     domain = data.get("domain")
-    tx = report_site(domain)
-    return jsonify({"status": "logged", "tx": tx})
+    log_debug(f"[Report] Domain manually reported as suspicious: {domain}")
+    return jsonify({"status": "logged"})
 
 
 @app.route("/logs", methods=["GET"])

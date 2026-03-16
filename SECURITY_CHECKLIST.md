@@ -15,7 +15,6 @@
   - `VIRUSTOTAL_API_KEY`
   - `PERPLEXITY_API`
   - `REDDIT_CLIENT_ID`, `REDDIT_CLIENT_SECRET`, `REDDIT_USER_AGENT`
-  - `RPC`, `CONTRACT_ADDRESS`, `PRIVATE_KEY`
 
 ### 3. Log Files
 - ✅ **All log files excluded** - `.gitignore` includes:

@@ -30,7 +30,7 @@ def _normalize_label(raw: str) -> Optional[str]:
 
 
 def predict_label(trust_score: Optional[float], risk: Optional[str], threshold: float) -> str:
-    if trust_score is not None and trust_score < threshold:
+    if trust_score is not None and trust_score <= threshold:
         return "fraud"
     if (risk or "").strip().lower() == "high risk":
         return "fraud"
@@ -74,7 +74,7 @@ def main() -> int:
     parser.add_argument("--input", default="dataset.csv", help="Input CSV path (default: dataset.csv)")
     parser.add_argument("--output", default="dataset_results.csv", help="Output CSV path (default: dataset_results.csv)")
     parser.add_argument("--api", default="http://localhost:5000", help="Backend base URL (default: http://localhost:5000)")
-    parser.add_argument("--threshold", type=float, default=50.0, help="Fraud threshold: trust_score < threshold (default: 50)")
+    parser.add_argument("--threshold", type=float, default=75.0, help="Fraud threshold: trust_score < threshold (default: 75)")
     parser.add_argument("--timeout", type=float, default=60.0, help="Per-request timeout seconds (default: 60)")
     args = parser.parse_args()
 
